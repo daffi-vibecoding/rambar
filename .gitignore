@@ -8,3 +8,5 @@ DerivedData/
 .netrc
 .venv/
 MLX_LLM_PREFERENCES.md
+dist/build/
+dist/*.dmg

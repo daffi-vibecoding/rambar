@@ -1,66 +1,62 @@
 # RamBar
 
-A tiny macOS menu bar monitor for RAM usage and system wattage.
+A tiny macOS menu bar app for RAM usage + system wattage.
 
 ## Tested Platform
 
 - Tested only on: `macOS 26.3 (Build 25D125)`
-- Apple Silicon machine
-- Dependency used for watts: [`macmon`](https://github.com/vladkens/macmon)
-
-No guarantees yet for other macOS versions/chipsets until broader testing is done.
+- Tested on Apple Silicon
+- Wattage source: [`macmon`](https://github.com/vladkens/macmon)
 
 ## Features
 
-- Menu bar display with:
-  - live **system watts** on the left
-  - **RAM usage bar** in the center
-  - **RAM %** on the right
-- Dropdown actions:
+- Menu bar readout:
+  - watts (`W`) on the left
+  - RAM usage bar in the center
+  - RAM usage percent on the right
+- Dropdown menu:
   - `Force Refresh`
   - `Open mac mon in Terminal`
-  - `Start on Startup` (checkmark toggle)
-  - `RAM: used/total` live line
-  - `Settings` refresh presets with checkmark selection:
-    - 1s, 3s, 5s, 10s, 30s, 60s
+  - `Start on Startup` toggle with checkmark
+  - live `RAM: used/total` line
+  - `Settings` section with refresh interval checkmarks:
+    - `1`, `3`, `5`, `10`, `30`, `60` second refresh
   - `Close RamBar`
-- Default refresh interval: `10s`
-- Persists selected refresh interval across launches
-- Designed to survive terminal close (`SIGHUP` ignored)
+- Default refresh interval: `10 seconds`
+- Selected refresh interval is persisted
+- Runs as a normal app (no Terminal window required)
 
-## Install
+## Easy Install (Drag to Applications)
 
-1. Install `macmon`:
+1. Download `RamBar-Installer.dmg` from the latest GitHub release.
+2. Open the DMG.
+3. Drag `RamBar.app` into `Applications`.
+4. Launch `RamBar` from Applications or Launchpad.
 
-```bash
-brew install vladkens/tap/macmon
-```
+Release page: [https://github.com/daffi-vibecoding/rambar/releases](https://github.com/daffi-vibecoding/rambar/releases)
 
-2. Build and run:
-
-```bash
-swift build
-./.build/arm64-apple-macosx/debug/RamBar
-```
-
-Optional detached launch:
+## Build Installer Locally
 
 ```bash
-nohup ./.build/arm64-apple-macosx/debug/RamBar >/tmp/rambar.out 2>/tmp/rambar.err < /dev/null &
+./scripts/make_installer.sh
 ```
+
+Outputs:
+- `dist/RamBar-Installer.dmg`
+- `dist/build/RamBar.app`
 
 ## Runtime Footprint (Estimated)
 
 Measured on `macOS 26.3` over a 45-second sample window.
 
-- Average CPU: `~0.19%`
-- CPU spike max observed: `~6.8%` (short bursts during metric polling)
-- Average RAM (RSS): `~47 MB`
-- RAM range observed: `~24 MB` to `~48 MB`
+- CPU average: `~0.19%`
+- CPU max observed spike: `~6.8%`
+- RAM (RSS) average: `~47 MB`
+- RAM observed range: `~24 MB` to `~48 MB`
 
-These numbers vary by refresh interval and machine.
+Values vary by hardware and refresh interval.
 
 ## Attribution
 
-- Wattage data is read via [`macmon`](https://github.com/vladkens/macmon).
-- This app was vibe-coded in Codex in about **30 minutes**.
+- Uses [`macmon`](https://github.com/vladkens/macmon) for power metrics.
+- Vibe-coded in Codex in about **30 minutes**.
