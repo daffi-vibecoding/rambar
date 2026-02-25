@@ -2,6 +2,8 @@
 
 A tiny macOS menu bar app for RAM usage + system wattage.
 
+![RamBar Logo](assets/rambar-logo-percent-reference.jpg)
+
 ## Tested Platform
 
 - Tested only on: `macOS 26.3 (Build 25D125)`
