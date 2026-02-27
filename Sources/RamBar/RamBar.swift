@@ -6,16 +6,21 @@ import SwiftUI
 @MainActor
 final class RamMonitor: ObservableObject {
     @Published private(set) var usedPercent: Int = 0
+    @Published private(set) var nonSystemUsedPercent: Int = 0
     @Published private(set) var ramUsageText: String = "--/--G"
     @Published private(set) var wattsText: String = "--W"
     @Published private(set) var refreshInterval: Int = 5
+    @Published private(set) var nonSystemLimitPercent: Int = 75
 
     private var timer: Timer?
     private let refreshKey = "RamBarRefreshIntervalSeconds"
+    private let nonSystemLimitKey = "RamBarNonSystemRamLimitPercent"
 
     init() {
         let saved = UserDefaults.standard.integer(forKey: refreshKey)
         refreshInterval = [1, 3, 5, 10, 30, 60].contains(saved) ? saved : 10
+        let savedLimit = UserDefaults.standard.integer(forKey: nonSystemLimitKey)
+        nonSystemLimitPercent = [75, 85, 90].contains(savedLimit) ? savedLimit : 75
         refresh()
         rescheduleTimer()
     }
@@ -26,6 +31,14 @@ final class RamMonitor: ObservableObject {
         refreshInterval = clamped
         UserDefaults.standard.set(clamped, forKey: refreshKey)
         rescheduleTimer()
+        refresh()
+    }
+
+    func setNonSystemLimitPercent(_ percent: Int) {
+        let clamped = [75, 85, 90].contains(percent) ? percent : 75
+        guard clamped != nonSystemLimitPercent else { return }
+        nonSystemLimitPercent = clamped
+        UserDefaults.standard.set(clamped, forKey: nonSystemLimitKey)
         refresh()
     }
 
@@ -44,6 +57,9 @@ final class RamMonitor: ObservableObject {
         let percent = Int((snapshot.usedBytes / snapshot.totalBytes) * 100.0)
         usedPercent = max(0, min(100, percent))
 
+        let nonSystemPercent = Int((snapshot.nonSystemUsedBytes / snapshot.totalBytes) * 100.0)
+        nonSystemUsedPercent = max(0, min(100, nonSystemPercent))
+
         let usedGiB = snapshot.usedBytes / 1_073_741_824.0
         let totalGiB = snapshot.totalBytes / 1_073_741_824.0
         ramUsageText = String(format: "%.1f/%.1fG", usedGiB, totalGiB)
@@ -53,6 +69,7 @@ final class RamMonitor: ObservableObject {
 
     private struct MemorySnapshot {
         let usedBytes: Double
+        let nonSystemUsedBytes: Double
         let totalBytes: Double
     }
 
@@ -79,8 +96,10 @@ final class RamMonitor: ObservableObject {
 
         let usedPages = Double(vmStats.active_count + vmStats.wire_count + vmStats.compressor_page_count)
         let usedBytes = usedPages * Double(pageSize)
+        let nonSystemPages = Double(vmStats.active_count)
+        let nonSystemUsedBytes = nonSystemPages * Double(pageSize)
 
-        return MemorySnapshot(usedBytes: usedBytes, totalBytes: totalBytes)
+        return MemorySnapshot(usedBytes: usedBytes, nonSystemUsedBytes: nonSystemUsedBytes, totalBytes: totalBytes)
     }
 
     private static func currentSystemWattsText() -> String? {
@@ -193,10 +212,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let monitor = RamMonitor()
     private var statusItem: NSStatusItem?
     private let macMonCommand = "macmon"
+    private let nonSystemLimitCommandTemplate = "echo \"Non-system RAM limit set to {PERCENT}%\""
+    private let nonSystemLimitRefreshSeconds: TimeInterval = 900
     private let launchManager = LaunchAtStartupManager()
     private var startupMenuItem: NSMenuItem?
     private var ramUsageMenuItem: NSMenuItem?
+    private var nonSystemRamMenuItem: NSMenuItem?
     private var refreshItems: [Int: NSMenuItem] = [:]
+    private var nonSystemLimitItems: [Int: NSMenuItem] = [:]
+    private var nonSystemLimitCommandTimer: Timer?
     private var cancellables: Set<AnyCancellable> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -241,6 +265,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(ramItem)
         ramUsageMenuItem = ramItem
 
+        let nonSystemItem = NSMenuItem(title: "Non-system RAM: \(monitor.nonSystemUsedPercent)% (limit \(monitor.nonSystemLimitPercent)%)", action: nil, keyEquivalent: "")
+        nonSystemItem.isEnabled = false
+        menu.addItem(nonSystemItem)
+        nonSystemRamMenuItem = nonSystemItem
+
         menu.addItem(.separator())
 
         let settingsHeader = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
@@ -259,11 +288,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        let nonSystemLimitHeader = NSMenuItem(title: "Non-system RAM Limit", action: nil, keyEquivalent: "")
+        nonSystemLimitHeader.isEnabled = false
+        menu.addItem(nonSystemLimitHeader)
+
+        for percent in [75, 85, 90] {
+            let title = "Set limit to \(percent)%"
+            let limitItem = NSMenuItem(title: title, action: #selector(selectNonSystemLimit(_:)), keyEquivalent: "")
+            limitItem.target = self
+            limitItem.tag = percent
+            menu.addItem(limitItem)
+            nonSystemLimitItems[percent] = limitItem
+        }
+        updateNonSystemLimitChecks(selected: monitor.nonSystemLimitPercent)
+
+        menu.addItem(.separator())
+
         let closeItem = NSMenuItem(title: "Close RamBar", action: #selector(quitApp), keyEquivalent: "")
         closeItem.target = self
         menu.addItem(closeItem)
 
         item.menu = menu
+
+        // Apply persisted limit at launch and keep re-applying every 15 minutes.
+        runNonSystemLimitCommand(percent: monitor.nonSystemLimitPercent)
+        nonSystemLimitCommandTimer = Timer.scheduledTimer(
+            timeInterval: nonSystemLimitRefreshSeconds,
+            target: self,
+            selector: #selector(onNonSystemLimitRefreshTimer),
+            userInfo: nil,
+            repeats: true
+        )
 
         monitor.$ramUsageText
             .receive(on: RunLoop.main)
@@ -271,11 +326,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.ramUsageMenuItem?.title = "RAM: \(usageText)"
             }
             .store(in: &cancellables)
+
+        monitor.$nonSystemUsedPercent
+            .combineLatest(monitor.$nonSystemLimitPercent)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] usedPercent, limitPercent in
+                let stateText = usedPercent >= limitPercent ? "HIGH" : "OK"
+                self?.nonSystemRamMenuItem?.title = "Non-system RAM: \(usedPercent)% (limit \(limitPercent)%, \(stateText))"
+            }
+            .store(in: &cancellables)
     }
 
     private func updateRefreshChecks(selected: Int) {
         for (seconds, item) in refreshItems {
             item.state = seconds == selected ? .on : .off
+        }
+    }
+
+    private func updateNonSystemLimitChecks(selected: Int) {
+        for (percent, item) in nonSystemLimitItems {
+            item.state = percent == selected ? .on : .off
         }
     }
 
@@ -306,6 +376,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func selectRefreshInterval(_ sender: NSMenuItem) {
         monitor.setRefreshInterval(seconds: sender.tag)
         updateRefreshChecks(selected: sender.tag)
+    }
+
+    @objc private func selectNonSystemLimit(_ sender: NSMenuItem) {
+        monitor.setNonSystemLimitPercent(sender.tag)
+        updateNonSystemLimitChecks(selected: sender.tag)
+        runNonSystemLimitCommand(percent: sender.tag)
+    }
+
+    @objc private func onNonSystemLimitRefreshTimer() {
+        runNonSystemLimitCommand(percent: monitor.nonSystemLimitPercent)
+    }
+
+    private func runNonSystemLimitCommand(percent: Int) {
+        let command = nonSystemLimitCommandTemplate.replacingOccurrences(of: "{PERCENT}", with: "\(percent)")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", command]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try? process.run()
     }
 
     @objc private func quitApp() {

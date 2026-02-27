@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 APP_NAME="RamBar"
 BUNDLE_ID="com.daffibot.rambar"
-VERSION="1.0.0"
+VERSION="1.0.1"
 BUILD_DIR="$ROOT_DIR/dist/build"
 APP_DIR="$BUILD_DIR/${APP_NAME}.app"
 ICON_SRC="$ROOT_DIR/assets/rambar-logo-percent-reference.jpg"
@@ -42,7 +42,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>${APP_NAME}</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>${VERSION}</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleVersion</key><string>2</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
 </dict>

@@ -23,6 +23,10 @@ A tiny macOS menu bar app for RAM usage + system wattage.
   - live `RAM: used/total` line
   - `Settings` section with refresh interval checkmarks:
     - `1`, `3`, `5`, `10`, `30`, `60` second refresh
+  - `Non-system RAM Limit` section with checkmarked choices:
+    - `75%`, `85%`, `90%`
+  - selecting a non-system limit also triggers a terminal command hook
+  - selected non-system limit command is re-sent every 15 minutes while app is running
   - `Close RamBar`
 - Default refresh interval: `10 seconds`
 - Selected refresh interval is persisted
