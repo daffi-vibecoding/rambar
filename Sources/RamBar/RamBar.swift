@@ -20,7 +20,7 @@ final class RamMonitor: ObservableObject {
         let saved = UserDefaults.standard.integer(forKey: refreshKey)
         refreshInterval = [1, 3, 5, 10, 30, 60].contains(saved) ? saved : 10
         let savedLimit = UserDefaults.standard.integer(forKey: nonSystemLimitKey)
-        nonSystemLimitPercent = [75, 85, 90].contains(savedLimit) ? savedLimit : 75
+        nonSystemLimitPercent = [75, 85, 90, 95].contains(savedLimit) ? savedLimit : 75
         refresh()
         rescheduleTimer()
     }
@@ -35,7 +35,7 @@ final class RamMonitor: ObservableObject {
     }
 
     func setNonSystemLimitPercent(_ percent: Int) {
-        let clamped = [75, 85, 90].contains(percent) ? percent : 75
+        let clamped = [75, 85, 90, 95].contains(percent) ? percent : 75
         guard clamped != nonSystemLimitPercent else { return }
         nonSystemLimitPercent = clamped
         UserDefaults.standard.set(clamped, forKey: nonSystemLimitKey)
@@ -292,7 +292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         nonSystemLimitHeader.isEnabled = false
         menu.addItem(nonSystemLimitHeader)
 
-        for percent in [75, 85, 90] {
+        for percent in [75, 85, 90, 95] {
             let title = "Set limit to \(percent)%"
             let limitItem = NSMenuItem(title: title, action: #selector(selectNonSystemLimit(_:)), keyEquivalent: "")
             limitItem.target = self
